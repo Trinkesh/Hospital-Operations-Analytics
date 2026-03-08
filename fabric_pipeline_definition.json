@@ -1,0 +1,157 @@
+{
+  "name": "Hospital_Analytics_Master_Pipeline",
+  "description": "Orchestrates Bronze → Silver → Gold Medallion pipeline for Hospital Operations Analytics",
+  "author": "Trinkesh Nimsarkar",
+  "version": "1.0",
+
+  "properties": {
+    "activities": [
+
+      // ── ACTIVITY 1: Validate Raw Files Exist ─────────────
+      {
+        "name": "Check_Raw_Files",
+        "type": "GetMetadata",
+        "typeProperties": {
+          "dataset": { "referenceName": "LandingZone_Files" },
+          "fieldList": ["exists", "lastModified", "size"]
+        },
+        "onSuccess": "Bronze_Ingest_All",
+        "onFailure":  "Send_Alert_Email"
+      },
+
+      // ── ACTIVITY 2: Bronze Ingestion (runs 4 notebooks in parallel) ──
+      {
+        "name": "Bronze_Ingest_All",
+        "type": "ForEach",
+        "typeProperties": {
+          "isSequential": false,
+          "items": ["patients", "admissions", "billing", "bed_occupancy"],
+          "activities": [
+            {
+              "name": "Bronze_Notebook",
+              "type": "FabricNotebook",
+              "typeProperties": {
+                "notebookId": "notebook_bronze_ingestion",
+                "parameters": {
+                  "table_name": { "value": "@item()", "type": "Expression" },
+                  "layer": "bronze"
+                }
+              }
+            }
+          ]
+        },
+        "onSuccess": "Silver_Transform_All"
+      },
+
+      // ── ACTIVITY 3: Silver Transformation ────────────────
+      {
+        "name": "Silver_Transform_All",
+        "type": "ForEach",
+        "typeProperties": {
+          "isSequential": true,
+          "items": ["patients", "admissions", "billing", "bed_occupancy"],
+          "activities": [
+            {
+              "name": "Silver_Notebook",
+              "type": "FabricNotebook",
+              "typeProperties": {
+                "notebookId": "notebook_silver_transformation",
+                "parameters": {
+                  "table_name": { "value": "@item()", "type": "Expression" },
+                  "layer": "silver"
+                }
+              }
+            }
+          ]
+        },
+        "onSuccess": "Gold_Star_Schema"
+      },
+
+      // ── ACTIVITY 4: Gold Star Schema Build ───────────────
+      {
+        "name": "Gold_Star_Schema",
+        "type": "FabricNotebook",
+        "typeProperties": {
+          "notebookId": "notebook_gold_star_schema",
+          "parameters": {
+            "rebuild_dims": true,
+            "rebuild_facts": true,
+            "rebuild_aggs": true
+          }
+        },
+        "onSuccess": "Refresh_Semantic_Model",
+        "onFailure":  "Send_Alert_Email"
+      },
+
+      // ── ACTIVITY 5: Refresh Power BI Semantic Model ──────
+      {
+        "name": "Refresh_Semantic_Model",
+        "type": "PowerBIActivityRefresh",
+        "typeProperties": {
+          "workspaceId": "YOUR_WORKSPACE_ID",
+          "datasetId":   "YOUR_DATASET_ID",
+          "refreshType": "Full"
+        },
+        "onSuccess": "Log_Success",
+        "onFailure":  "Send_Alert_Email"
+      },
+
+      // ── ACTIVITY 6: Log Pipeline Run ─────────────────────
+      {
+        "name": "Log_Success",
+        "type": "Lookup",
+        "typeProperties": {
+          "query": "INSERT INTO pipeline_log VALUES (GETDATE(), 'Hospital_Pipeline', 'SUCCESS', @pipeline().RunId)"
+        }
+      },
+
+      // ── ACTIVITY 7: Alert on Failure ─────────────────────
+      {
+        "name": "Send_Alert_Email",
+        "type": "WebActivity",
+        "typeProperties": {
+          "url": "https://YOUR_LOGIC_APP_URL",
+          "method": "POST",
+          "body": {
+            "subject": "⚠️ Hospital Analytics Pipeline Failed",
+            "body":    "Pipeline @{pipeline().Pipeline} failed at @{utcnow()}. Run ID: @{pipeline().RunId}",
+            "to":      "trinkeshn@gmail.com"
+          }
+        }
+      }
+    ],
+
+    "triggers": [
+      {
+        "name": "Daily_6AM_Trigger",
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "startTime": "06:00:00",
+            "timeZone": "India Standard Time"
+          }
+        }
+      }
+    ],
+
+    "parameters": {
+      "env": {
+        "type": "string",
+        "defaultValue": "prod"
+      },
+      "load_type": {
+        "type": "string",
+        "defaultValue": "incremental",
+        "allowedValues": ["full", "incremental"]
+      }
+    }
+  },
+
+  "_notes": {
+    "incremental_strategy": "Use watermark table in SQL to track last_load_timestamp. Filter source: WHERE updated_at > @{last_load_time}",
+    "error_handling": "All notebooks wrapped in try/except — failures write to quarantine_log table",
+    "monitoring": "Use Fabric Monitor Hub to view run history, duration, and alerts"
+  }
+}

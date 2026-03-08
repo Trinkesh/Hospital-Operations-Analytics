@@ -1,0 +1,309 @@
+// =============================================================
+// DAX MEASURES — Hospital Operations Dashboard
+// Project: Healthcare Analytics Lakehouse
+// Author: Trinkesh Nimsarkar
+// Table: Copy each measure into Power BI Desktop
+// =============================================================
+// HOW TO USE:
+//   1. Load all Gold CSVs into Power BI
+//   2. Create relationships (see RELATIONSHIPS section below)
+//   3. Create a Measures table (Enter Data → blank table)
+//   4. Copy-paste each measure into that table
+// =============================================================
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 1: ADMISSIONS KPIs
+// ─────────────────────────────────────────────────────────────
+
+Total Admissions = 
+COUNTROWS(fact_admissions)
+
+// YTD Admissions
+YTD Admissions = 
+TOTALYTD([Total Admissions], dim_date[full_date])
+
+// Prior Year Admissions (same period)
+PY Admissions = 
+CALCULATE([Total Admissions], SAMEPERIODLASTYEAR(dim_date[full_date]))
+
+// YoY Admission Growth %
+Admission Growth YoY% = 
+VAR CurrentYear = [Total Admissions]
+VAR PriorYear   = [PY Admissions]
+RETURN
+    IF(
+        ISBLANK(PriorYear) || PriorYear = 0,
+        BLANK(),
+        DIVIDE(CurrentYear - PriorYear, PriorYear) * 100
+    )
+
+// Active (Current) Admissions — patients still in hospital
+Active Admissions = 
+CALCULATE(
+    COUNTROWS(fact_admissions),
+    ISBLANK(fact_admissions[discharge_date_key])
+)
+
+// Emergency Admission Rate
+Emergency Rate% = 
+DIVIDE(
+    CALCULATE([Total Admissions], fact_admissions[admission_type] = "Emergency"),
+    [Total Admissions]
+) * 100
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 2: LENGTH OF STAY (LOS)
+// ─────────────────────────────────────────────────────────────
+
+Avg Length of Stay = 
+AVERAGE(fact_admissions[length_of_stay])
+
+// LOS vs Target (target = 5 days)
+LOS vs Target = 
+[Avg Length of Stay] - 5
+
+// LOS Trend (3-month rolling avg)
+LOS Rolling 3M = 
+AVERAGEX(
+    DATESINPERIOD(dim_date[full_date], LASTDATE(dim_date[full_date]), -3, MONTH),
+    [Avg Length of Stay]
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 3: READMISSION & MORTALITY
+// ─────────────────────────────────────────────────────────────
+
+Readmission Count = 
+CALCULATE(
+    COUNTROWS(fact_admissions),
+    fact_admissions[readmission_flag] = 1
+)
+
+Readmission Rate% = 
+DIVIDE([Readmission Count], [Total Admissions]) * 100
+
+// Readmission Rate vs Benchmark (industry: 15%)
+Readmission vs Benchmark = 
+[Readmission Rate%] - 15
+
+Mortality Count = 
+CALCULATE(
+    COUNTROWS(fact_admissions),
+    fact_admissions[mortality_flag] = 1
+)
+
+Mortality Rate% = 
+DIVIDE([Mortality Count], [Total Admissions]) * 100
+
+High Risk Patients = 
+CALCULATE(
+    COUNTROWS(fact_admissions),
+    fact_admissions[high_risk_flag] = 1
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 4: BED OCCUPANCY
+// ─────────────────────────────────────────────────────────────
+
+Avg Occupancy Rate% = 
+AVERAGE(fact_bed_occupancy[occupancy_rate])
+
+// Latest day occupancy
+Current Occupancy% = 
+CALCULATE(
+    AVERAGE(fact_bed_occupancy[occupancy_rate]),
+    LASTDATE(dim_date[full_date])
+)
+
+Total Beds = 
+CALCULATE(
+    SUM(fact_bed_occupancy[total_beds]),
+    LASTDATE(dim_date[full_date])
+)
+
+Occupied Beds = 
+CALCULATE(
+    SUM(fact_bed_occupancy[occupied_beds]),
+    LASTDATE(dim_date[full_date])
+)
+
+Available Beds = 
+CALCULATE(
+    SUM(fact_bed_occupancy[available_beds]),
+    LASTDATE(dim_date[full_date])
+)
+
+// Critical occupancy flag (>95%)
+Departments at Critical Capacity = 
+CALCULATE(
+    DISTINCTCOUNT(fact_bed_occupancy[department_key]),
+    fact_bed_occupancy[occupancy_rate] >= 95
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 5: REVENUE & BILLING
+// ─────────────────────────────────────────────────────────────
+
+Total Revenue = 
+SUM(fact_billing[total_amount])
+
+YTD Revenue = 
+TOTALYTD([Total Revenue], dim_date[full_date])
+
+// Prior Year Revenue
+PY Revenue = 
+CALCULATE([Total Revenue], SAMEPERIODLASTYEAR(dim_date[full_date]))
+
+Revenue Growth YoY% = 
+DIVIDE([Total Revenue] - [PY Revenue], [PY Revenue]) * 100
+
+Insurance Revenue = 
+SUM(fact_billing[insurance_amount])
+
+Patient Revenue = 
+SUM(fact_billing[patient_payable])
+
+Outstanding Revenue = 
+SUM(fact_billing[outstanding_amount])
+
+// Collection Rate
+Collection Rate% = 
+DIVIDE([Total Revenue] - [Outstanding Revenue], [Total Revenue]) * 100
+
+// Revenue per Admission
+Revenue per Admission = 
+DIVIDE([Total Revenue], [Total Admissions])
+
+// Avg Bill Amount
+Avg Bill Amount = 
+AVERAGE(fact_billing[total_amount])
+
+// Revenue by insurance split
+Insurance Coverage% = 
+DIVIDE([Insurance Revenue], [Total Revenue]) * 100
+
+// Pending Payments Count
+Pending Bills = 
+CALCULATE(
+    COUNTROWS(fact_billing),
+    fact_billing[payment_status] IN {"Pending", "Partial"}
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 6: TIME INTELLIGENCE
+// ─────────────────────────────────────────────────────────────
+
+// Month-over-Month Revenue Change
+MoM Revenue Change% = 
+VAR CurrentMonth = [Total Revenue]
+VAR PriorMonth = CALCULATE([Total Revenue], PREVIOUSMONTH(dim_date[full_date]))
+RETURN DIVIDE(CurrentMonth - PriorMonth, PriorMonth) * 100
+
+// Quarter-to-Date
+QTD Admissions = 
+TOTALQTD([Total Admissions], dim_date[full_date])
+
+// Rolling 12 months revenue
+Revenue Rolling 12M = 
+CALCULATE(
+    [Total Revenue],
+    DATESINPERIOD(dim_date[full_date], LASTDATE(dim_date[full_date]), -12, MONTH)
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 7: DEPARTMENT RANKING
+// ─────────────────────────────────────────────────────────────
+
+// Department rank by admissions
+Dept Rank by Admissions = 
+RANKX(
+    ALL(dim_department[department_name]),
+    [Total Admissions],
+    ,
+    DESC,
+    DENSE
+)
+
+// Top 3 departments flag
+Is Top 3 Department = 
+IF([Dept Rank by Admissions] <= 3, "Top 3", "Others")
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 8: DYNAMIC KPI CARDS (with conditional formatting)
+// ─────────────────────────────────────────────────────────────
+
+// KPI: Readmission color (Red if > 15%)
+Readmission KPI Color = 
+SWITCH(
+    TRUE(),
+    [Readmission Rate%] >= 20, "#D32F2F",   -- Red: Critical
+    [Readmission Rate%] >= 15, "#F57C00",   -- Orange: Warning
+    "#388E3C"                                -- Green: Good
+)
+
+// KPI: Occupancy color
+Occupancy KPI Color = 
+SWITCH(
+    TRUE(),
+    [Avg Occupancy Rate%] >= 95, "#D32F2F",
+    [Avg Occupancy Rate%] >= 80, "#F57C00",
+    "#388E3C"
+)
+
+// KPI: Collection Rate color
+Collection KPI Color = 
+SWITCH(
+    TRUE(),
+    [Collection Rate%] < 70, "#D32F2F",
+    [Collection Rate%] < 85, "#F57C00",
+    "#388E3C"
+)
+
+// ─────────────────────────────────────────────────────────────
+// SECTION 9: PATIENT METRICS
+// ─────────────────────────────────────────────────────────────
+
+Total Unique Patients = 
+DISTINCTCOUNT(fact_admissions[patient_id])
+
+Avg Patient Age = 
+AVERAGE(dim_patient[age])
+
+Female Patient% = 
+DIVIDE(
+    CALCULATE(DISTINCTCOUNT(fact_admissions[patient_id]),
+              dim_patient[gender] = "Female"),
+    [Total Unique Patients]
+) * 100
+
+// ─────────────────────────────────────────────────────────────
+// RELATIONSHIPS TO CREATE IN POWER BI
+// (Model View → Manage Relationships)
+// =============================================================
+//
+//  fact_admissions[patient_id]        → dim_patient[patient_key]          (Many-to-One)
+//  fact_admissions[department_key]    → dim_department[department_key]     (Many-to-One)
+//  fact_admissions[doctor_key]        → dim_doctor[doctor_key]             (Many-to-One)
+//  fact_admissions[admission_date_key]→ dim_date[date_key]                 (Many-to-One)
+//
+//  fact_billing[admission_id]         → fact_admissions[admission_id]      (Many-to-One)
+//  fact_billing[patient_id]           → dim_patient[patient_key]           (Many-to-One)
+//
+//  fact_bed_occupancy[department_key] → dim_department[department_key]     (Many-to-One)
+//  fact_bed_occupancy[snapshot_date_key] → dim_date[date_key]              (Many-to-One)
+//
+// =============================================================
+
+// ─────────────────────────────────────────────────────────────
+// ROW LEVEL SECURITY (RLS) — DEPARTMENT BASED
+// =============================================================
+// In Power BI Desktop → Modeling → Manage Roles
+// 
+// Role: DeptManager
+// Table: dim_department
+// DAX Filter: [department_name] = USERPRINCIPALNAME()
+//
+// Role: ReadOnly
+// Table: fact_billing  
+// DAX Filter: FALSE()   ← blocks billing for non-finance users
+// =============================================================
