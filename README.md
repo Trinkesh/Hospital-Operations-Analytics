@@ -1,33 +1,33 @@
-# 🏥 Hospital Operations Analytics Lakehouse
+#  Hospital Operations Analytics Lakehouse
 
 **End-to-End Microsoft Fabric + Power BI Project**  
 *By Trinkesh Nimsarkar — Senior BI Developer | Microsoft Fabric Data Engineer*
 
 ---
 
-## 📌 Project Summary
+## Project Summary
 
 A full healthcare analytics solution using **Microsoft Fabric Medallion Architecture** — from raw EHR data ingestion to production Power BI dashboards with 30+ KPIs.
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Raw CSV Files
       │
-      ▼
-🥉 BRONZE LAYER    ← Ingest + Metadata + Schema Validation
+      
+ BRONZE LAYER    ← Ingest + Metadata + Schema Validation
+      │
+      
+SILVER LAYER    ← Cleanse + Standardize + Business Rules + Quarantine
+      │
+      
+GOLD LAYER      ← Star Schema: Dims + Facts + Aggregates
       │
       ▼
-🥈 SILVER LAYER    ← Cleanse + Standardize + Business Rules + Quarantine
-      │
-      ▼
-🥇 GOLD LAYER      ← Star Schema: Dims + Facts + Aggregates
-      │
-      ▼
-📊 POWER BI        ← 5 Dashboard Pages + 30 DAX Measures + RLS
+POWER BI        ← 5 Dashboard Pages + 30 DAX Measures + RLS
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 | Folder | Contents |
 |--------|----------|
@@ -39,7 +39,7 @@ Raw CSV Files
 | `07_pipeline/` | Fabric Pipeline JSON (Bronze→Silver→Gold→PBI Refresh) |
 | `06_docs/` | Full project documentation |
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 - **Microsoft Fabric** (Lakehouse, Notebooks, Pipelines, Semantic Model)  
 - **PySpark** — ETL/ELT transformations  
@@ -48,7 +48,7 @@ Raw CSV Files
 - **SQL** — CTEs, window functions, performance tuning  
 - **Azure Data Factory** — (Pipeline pattern)  
 
-## 📊 Key Metrics Delivered
+## Key Metrics Delivered
 
 | KPI | Value |
 |-----|-------|
@@ -59,13 +59,13 @@ Raw CSV Files
 | Dashboard Pages | 5 |
 | DAX Measures | 30+ |
 
-## 🎓 Certifications Applied
+## Certifications Applied
 
 - **PL-300** — Power BI Data Analyst  
 - **DP-600** — Fabric Analytics Engineering Associate  
 - **DP-700** — Fabric Data Engineer Associate  
 
-## 🚀 How to Run Locally
+##  How to Run Locally
 
 ```bash
 # 1. Generate raw data
@@ -84,6 +84,6 @@ cd ../04_gold && python gold_star_schema.py
 # 6. Import dax_measures.dax into your Measures table
 ```
 
-## 📬 Contact
+## Contact
 
 **Trinkesh Nimsarkar** | trinkeshn@gmail.com | [LinkedIn](https://linkedin.com/in/trinkesh-nimsarkar)
