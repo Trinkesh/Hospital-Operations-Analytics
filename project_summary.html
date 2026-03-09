@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hospital Operations Analytics Lakehouse — Trinkesh Nimsarkar</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #080e14;
+    --surface:   #0d1821;
+    --border:    #1a2a3a;
+    --teal:      #00c9b1;
+    --teal-dim:  #00877a;
+    --amber:     #f5a623;
+    --red:       #ff5c5c;
+    --text:      #e2eaf2;
+    --muted:     #5a7a94;
+    --card:      #0f1e2d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── Animated grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,201,177,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,201,177,.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Glow blobs ── */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: .25;
+  }
+  .blob-1 { width: 600px; height: 600px; background: var(--teal); top: -200px; left: -200px; animation: drift 18s ease-in-out infinite alternate; }
+  .blob-2 { width: 400px; height: 400px; background: #0052cc; bottom: 10%; right: -100px; animation: drift 22s ease-in-out infinite alternate-reverse; }
+  @keyframes drift { from { transform: translate(0,0); } to { transform: translate(40px, 30px); } }
+
+  /* ── Layout ── */
+  .wrap { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Header ── */
+  header {
+    padding: 80px 0 60px;
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp .8s ease both;
+  }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--teal);
+    background: rgba(0,201,177,.08); border: 1px solid rgba(0,201,177,.2);
+    padding: 5px 14px; border-radius: 4px; margin-bottom: 24px;
+  }
+  .eyebrow::before { content: '▶'; font-size: 8px; }
+
+  h1 {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: clamp(36px, 6vw, 64px); line-height: 1.05;
+    letter-spacing: -.02em; margin-bottom: 8px;
+  }
+  h1 span { color: var(--teal); }
+
+  .subtitle {
+    font-size: 17px; color: var(--muted); margin: 16px 0 32px;
+    max-width: 560px;
+  }
+
+  /* ── Badge row ── */
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 36px; }
+  .badge {
+    font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 400;
+    padding: 5px 12px; border-radius: 3px; letter-spacing: .05em;
+    border: 1px solid;
+  }
+  .badge-teal  { color: var(--teal);  border-color: rgba(0,201,177,.3);  background: rgba(0,201,177,.07); }
+  .badge-amber { color: var(--amber); border-color: rgba(245,166,35,.3);  background: rgba(245,166,35,.07); }
+  .badge-blue  { color: #60a5fa;      border-color: rgba(96,165,250,.3);  background: rgba(96,165,250,.07); }
+  .badge-gray  { color: var(--muted); border-color: var(--border);        background: rgba(255,255,255,.03); }
+
+  /* ── Author ── */
+  .author-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px;
+    width: fit-content;
+  }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), #0052cc);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px;
+    color: var(--bg); flex-shrink: 0;
+  }
+  .author-info { line-height: 1.3; }
+  .author-name { font-weight: 500; font-size: 14px; }
+  .author-role { font-size: 12px; color: var(--muted); }
+  .cert-pills { display: flex; gap: 6px; margin-top: 4px; }
+  .cert { font-family: 'DM Mono', monospace; font-size: 9px; padding: 2px 6px; border-radius: 2px; background: rgba(0,201,177,.12); color: var(--teal); border: 1px solid rgba(0,201,177,.2); }
+
+  /* ── Section titles ── */
+  .section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+  .section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--teal); margin-bottom: 8px;
+  }
+  h2 {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 28px;
+    letter-spacing: -.01em; margin-bottom: 32px;
+  }
+
+  /* ── KPI bar ── */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .kpi {
+    background: var(--card); padding: 28px 24px;
+    transition: background .2s;
+  }
+  .kpi:hover { background: #132030; }
+  .kpi-val {
+    font-family: 'Syne', sans-serif; font-size: 36px; font-weight: 800;
+    color: var(--teal); line-height: 1; margin-bottom: 6px;
+  }
+  .kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  /* ── Architecture pipeline ── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden;
+  }
+  .pipe-stage {
+    flex: 1; padding: 28px 20px; position: relative;
+    border-right: 1px solid var(--border);
+    transition: background .2s;
+  }
+  .pipe-stage:last-child { border-right: none; }
+  .pipe-stage:hover { background: #132030; }
+  .pipe-icon {
+    font-size: 28px; margin-bottom: 10px; display: block;
+  }
+  .pipe-name {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px;
+    margin-bottom: 8px;
+  }
+  .pipe-bronze { border-top: 3px solid #cd7f32; }
+  .pipe-silver { border-top: 3px solid #9ea3a8; }
+  .pipe-gold   { border-top: 3px solid #f5a623; }
+  .pipe-pbi    { border-top: 3px solid #f2c811; }
+  .pipe-items { list-style: none; }
+  .pipe-items li {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); padding: 2px 0;
+  }
+  .pipe-items li::before { content: '→ '; color: var(--teal); }
+
+  .pipe-arrow {
+    display: none;
+  }
+
+  /* ── Star schema diagram ── */
+  .schema-wrap {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 40px; font-family: 'DM Mono', monospace; font-size: 12px;
+    overflow-x: auto;
+  }
+  .schema-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+    align-items: center;
+  }
+  .schema-table {
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+  }
+  .schema-table-header {
+    padding: 8px 12px; font-size: 11px; font-weight: 400;
+    letter-spacing: .05em;
+  }
+  .fact-header  { background: rgba(245,166,35,.15); color: var(--amber); border-bottom: 1px solid rgba(245,166,35,.2); }
+  .dim-header   { background: rgba(0,201,177,.1);  color: var(--teal);  border-bottom: 1px solid rgba(0,201,177,.2); }
+  .schema-cols  { padding: 10px 12px; background: rgba(255,255,255,.02); }
+  .schema-col   { padding: 2px 0; color: var(--muted); font-size: 10px; }
+  .schema-col.pk { color: var(--amber); }
+  .schema-col.fk { color: var(--teal); }
+
+  /* ── Tables list ── */
+  .tables-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .table-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; transition: border-color .2s, transform .2s;
+  }
+  .table-card:hover { border-color: var(--teal-dim); transform: translateY(-2px); }
+  .table-card-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .table-name {
+    font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text);
+  }
+  .table-type {
+    font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 8px;
+    border-radius: 3px; letter-spacing: .05em;
+  }
+  .type-fact { background: rgba(245,166,35,.12); color: var(--amber); border: 1px solid rgba(245,166,35,.25); }
+  .type-dim  { background: rgba(0,201,177,.1);  color: var(--teal);  border: 1px solid rgba(0,201,177,.2); }
+  .type-agg  { background: rgba(96,165,250,.1); color: #60a5fa;     border: 1px solid rgba(96,165,250,.2); }
+  .table-rows { font-size: 22px; font-family: 'Syne', sans-serif; font-weight: 700; color: var(--teal); }
+  .table-rows span { font-size: 11px; color: var(--muted); font-family: 'DM Sans', sans-serif; font-weight: 300; margin-left: 4px; }
+  .table-cols { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+  /* ── DAX measures ── */
+  .dax-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .dax-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 18px; border-left: 3px solid var(--teal);
+  }
+  .dax-category { font-size: 10px; color: var(--teal); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; font-family: 'DM Mono', monospace; }
+  .dax-measures { display: flex; flex-direction: column; gap: 4px; }
+  .dax-measure { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .dax-measure::before { content: 'fx '; color: var(--amber); }
+
+  /* ── Files tree ── */
+  .file-tree {
+    background: #060c12; border: 1px solid var(--border); border-radius: 10px;
+    padding: 28px 32px; font-family: 'DM Mono', monospace; font-size: 13px;
+    line-height: 2;
+  }
+  .tree-root { color: var(--text); font-size: 14px; font-weight: 400; }
+  .tree-dir  { color: #60a5fa; }
+  .tree-file { color: var(--muted); }
+  .tree-file.py    { color: #a8d8a8; }
+  .tree-file.dax   { color: var(--amber); }
+  .tree-file.json  { color: #f9a8d4; }
+  .tree-file.csv   { color: #c4b5fd; }
+  .tree-file.md    { color: var(--text); }
+  .tree-comment { color: #2a4a6a; font-size: 11px; }
+  .tree-indent { padding-left: 20px; }
+  .tree-indent2 { padding-left: 40px; }
+
+  /* ── Impact table ── */
+  .impact-table { width: 100%; border-collapse: collapse; }
+  .impact-table th {
+    background: var(--card); border: 1px solid var(--border);
+    padding: 12px 20px; text-align: left; font-family: 'DM Mono', monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    font-weight: 400;
+  }
+  .impact-table td {
+    border: 1px solid var(--border); padding: 14px 20px;
+    font-size: 14px; vertical-align: middle;
+  }
+  .impact-table tr:hover td { background: var(--card); }
+  .before { color: var(--red); font-family: 'DM Mono', monospace; font-size: 13px; }
+  .after  { color: var(--teal); font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; }
+  .metric-name { font-weight: 500; }
+
+  /* ── Footer ── */
+  footer {
+    padding: 48px 0; text-align: center;
+    font-size: 13px; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--teal); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .section { animation: fadeUp .6s ease both; }
+  .section:nth-child(2) { animation-delay: .1s; }
+  .section:nth-child(3) { animation-delay: .2s; }
+  .section:nth-child(4) { animation-delay: .3s; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .pipeline { flex-direction: column; }
+    .pipe-stage { border-right: none; border-bottom: 1px solid var(--border); }
+    .tables-grid { grid-template-columns: 1fr; }
+    .schema-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<!-- ═══════════════════════════════════════════════ HEADER -->
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Portfolio Project · Healthcare Analytics</div>
+    <h1>Hospital Operations<br><span>Analytics Lakehouse</span></h1>
+    <p class="subtitle">End-to-end Microsoft Fabric data engineering project — raw EHR ingestion to production Power BI dashboards using Medallion Architecture.</p>
+
+    <div class="badges">
+      <span class="badge badge-teal">Microsoft Fabric</span>
+      <span class="badge badge-teal">Power BI</span>
+      <span class="badge badge-teal">Delta Lake</span>
+      <span class="badge badge-blue">PySpark</span>
+      <span class="badge badge-blue">Azure Data Factory</span>
+      <span class="badge badge-amber">DAX</span>
+      <span class="badge badge-amber">Star Schema</span>
+      <span class="badge badge-gray">SQL</span>
+      <span class="badge badge-gray">Healthcare Analytics</span>
+    </div>
+
+    <div class="author-row">
+      <div class="avatar">TN</div>
+      <div class="author-info">
+        <div class="author-name">Trinkesh Nimsarkar</div>
+        <div class="author-role">Senior BI Developer · Konverge AI · Nagpur</div>
+        <div class="cert-pills">
+          <span class="cert">PL-300</span>
+          <span class="cert">DP-600</span>
+          <span class="cert">DP-700</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════ KPIs -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">By The Numbers</div>
+    <h2>Project Scale</h2>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-val">22K+</div>
+        <div class="kpi-label">Total Records Generated</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-val">₹51.4Cr</div>
+        <div class="kpi-label">Revenue Tracked</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-val">10</div>
+        <div class="kpi-label">Gold Tables (Star Schema)</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-val">30+</div>
+        <div class="kpi-label">DAX Measures</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-val">5</div>
+        <div class="kpi-label">Dashboard Pages</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-val">~99%</div>
+        <div class="kpi-label">Data Accuracy</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ ARCHITECTURE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">System Design</div>
+    <h2>Medallion Architecture</h2>
+    <div class="pipeline">
+      <div class="pipe-stage pipe-bronze">
+        <span class="pipe-icon">🥉</span>
+        <div class="pipe-name">Bronze Layer</div>
+        <ul class="pipe-items">
+          <li>Raw CSV ingestion</li>
+          <li>Metadata tagging</li>
+          <li>Schema validation</li>
+          <li>Null % reporting</li>
+          <li>Audit timestamps</li>
+        </ul>
+      </div>
+      <div class="pipe-stage pipe-silver">
+        <span class="pipe-icon">🥈</span>
+        <div class="pipe-name">Silver Layer</div>
+        <ul class="pipe-items">
+          <li>Deduplication</li>
+          <li>Date standardization</li>
+          <li>Business rule checks</li>
+          <li>Derived columns</li>
+          <li>Quarantine logic</li>
+        </ul>
+      </div>
+      <div class="pipe-stage pipe-gold">
+        <span class="pipe-icon">🥇</span>
+        <div class="pipe-name">Gold Layer</div>
+        <ul class="pipe-items">
+          <li>Star schema build</li>
+          <li>4 dimension tables</li>
+          <li>3 fact tables</li>
+          <li>3 aggregate tables</li>
+          <li>Semantic model</li>
+        </ul>
+      </div>
+      <div class="pipe-stage pipe-pbi">
+        <span class="pipe-icon">📊</span>
+        <div class="pipe-name">Power BI</div>
+        <ul class="pipe-items">
+          <li>5 dashboard pages</li>
+          <li>30+ DAX measures</li>
+          <li>Time intelligence</li>
+          <li>RLS security</li>
+          <li>Auto-refresh</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ DATA MODEL -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">Data Modeling</div>
+    <h2>Gold Layer Tables</h2>
+    <div class="tables-grid">
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">fact_admissions</div>
+          <span class="table-type type-fact">FACT</span>
+        </div>
+        <div class="table-rows">5,000 <span>rows</span></div>
+        <div class="table-cols">admission_id · patient_id · department_key · doctor_key · admission_date_key · LOS · readmission_flag · mortality_flag · high_risk_flag</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">fact_billing</div>
+          <span class="table-type type-fact">FACT</span>
+        </div>
+        <div class="table-rows">5,000 <span>rows</span></div>
+        <div class="table-cols">bill_id · total_amount · insurance_amount · patient_payable · outstanding_amount · payment_status · revenue_tier</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">fact_bed_occupancy</div>
+          <span class="table-type type-fact">FACT</span>
+        </div>
+        <div class="table-rows">10,950 <span>rows</span></div>
+        <div class="table-cols">occupancy_id · department_key · snapshot_date_key · total_beds · occupied_beds · occupancy_rate · occupancy_status</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">dim_date</div>
+          <span class="table-type type-dim">DIM</span>
+        </div>
+        <div class="table-rows">2,191 <span>rows</span></div>
+        <div class="table-cols">date_key · full_date · day · month · month_name · quarter · year · week_number · is_weekend</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">dim_patient</div>
+          <span class="table-type type-dim">DIM</span>
+        </div>
+        <div class="table-rows">2,000 <span>rows</span></div>
+        <div class="table-cols">patient_key · gender · age · age_band · blood_group · city · insurance_type</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">dim_department</div>
+          <span class="table-type type-dim">DIM</span>
+        </div>
+        <div class="table-rows">10 <span>rows</span></div>
+        <div class="table-cols">department_key · department_name · specialty · dept_type</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">agg_monthly_admissions</div>
+          <span class="table-type type-agg">AGG</span>
+        </div>
+        <div class="table-rows">48 <span>rows</span></div>
+        <div class="table-cols">Pre-computed monthly KPIs — total admissions, avg LOS, readmission rate, mortality rate, emergency count</div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-name">agg_revenue_summary</div>
+          <span class="table-type type-agg">AGG</span>
+        </div>
+        <div class="table-rows">296 <span>rows</span></div>
+        <div class="table-cols">Monthly revenue by insurance — total, insurance covered, patient payable, outstanding, collection rate</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ DAX -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">Power BI</div>
+    <h2>DAX Measures (30+)</h2>
+    <div class="dax-grid">
+
+      <div class="dax-card">
+        <div class="dax-category">Admissions</div>
+        <div class="dax-measures">
+          <span class="dax-measure">Total Admissions</span>
+          <span class="dax-measure">YTD Admissions</span>
+          <span class="dax-measure">PY Admissions</span>
+          <span class="dax-measure">Admission Growth YoY%</span>
+          <span class="dax-measure">Active Admissions</span>
+          <span class="dax-measure">Emergency Rate%</span>
+        </div>
+      </div>
+
+      <div class="dax-card" style="border-left-color: var(--amber);">
+        <div class="dax-category" style="color:var(--amber)">Revenue</div>
+        <div class="dax-measures">
+          <span class="dax-measure">Total Revenue</span>
+          <span class="dax-measure">YTD Revenue</span>
+          <span class="dax-measure">Revenue Growth YoY%</span>
+          <span class="dax-measure">Collection Rate%</span>
+          <span class="dax-measure">Outstanding Revenue</span>
+          <span class="dax-measure">Revenue per Admission</span>
+        </div>
+      </div>
+
+      <div class="dax-card" style="border-left-color: var(--red);">
+        <div class="dax-category" style="color:var(--red)">Clinical Quality</div>
+        <div class="dax-measures">
+          <span class="dax-measure">Readmission Rate%</span>
+          <span class="dax-measure">Readmission vs Benchmark</span>
+          <span class="dax-measure">Mortality Rate%</span>
+          <span class="dax-measure">High Risk Patients</span>
+          <span class="dax-measure">Avg Length of Stay</span>
+          <span class="dax-measure">LOS Rolling 3M</span>
+        </div>
+      </div>
+
+      <div class="dax-card" style="border-left-color: #60a5fa;">
+        <div class="dax-category" style="color:#60a5fa">Bed Occupancy</div>
+        <div class="dax-measures">
+          <span class="dax-measure">Avg Occupancy Rate%</span>
+          <span class="dax-measure">Current Occupancy%</span>
+          <span class="dax-measure">Available Beds</span>
+          <span class="dax-measure">Depts at Critical Capacity</span>
+          <span class="dax-measure">Occupancy KPI Color</span>
+        </div>
+      </div>
+
+      <div class="dax-card" style="border-left-color: #c4b5fd;">
+        <div class="dax-category" style="color:#c4b5fd">Time Intelligence</div>
+        <div class="dax-measures">
+          <span class="dax-measure">QTD Admissions</span>
+          <span class="dax-measure">MoM Revenue Change%</span>
+          <span class="dax-measure">Revenue Rolling 12M</span>
+          <span class="dax-measure">SAMEPERIODLASTYEAR</span>
+          <span class="dax-measure">TOTALYTD / TOTALQTD</span>
+        </div>
+      </div>
+
+      <div class="dax-card" style="border-left-color: #f9a8d4;">
+        <div class="dax-category" style="color:#f9a8d4">Dynamic / UI</div>
+        <div class="dax-measures">
+          <span class="dax-measure">Dept Rank by Admissions</span>
+          <span class="dax-measure">Is Top 3 Department</span>
+          <span class="dax-measure">Readmission KPI Color</span>
+          <span class="dax-measure">Collection KPI Color</span>
+          <span class="dax-measure">Female Patient%</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ BUSINESS IMPACT -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">Results</div>
+    <h2>Business Impact</h2>
+    <table class="impact-table">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">Reporting Turnaround</td>
+          <td class="before">3–5 days (manual Excel)</td>
+          <td class="after">< 1 hour (automated)</td>
+        </tr>
+        <tr>
+          <td class="metric-name">Data Accuracy</td>
+          <td class="before">~82%</td>
+          <td class="after">~99% (validated)</td>
+        </tr>
+        <tr>
+          <td class="metric-name">Pipeline Refresh Time</td>
+          <td class="before">4+ hours</td>
+          <td class="after">~45 mins (−60%)</td>
+        </tr>
+        <tr>
+          <td class="metric-name">Revenue Visibility</td>
+          <td class="before">No outstanding tracking</td>
+          <td class="after">Real-time dashboard</td>
+        </tr>
+        <tr>
+          <td class="metric-name">Readmission Monitoring</td>
+          <td class="before">No early warning</td>
+          <td class="after">Live rate vs 15% benchmark</td>
+        </tr>
+        <tr>
+          <td class="metric-name">Bed Utilization</td>
+          <td class="before">Manual daily report</td>
+          <td class="after">Critical capacity alerts</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ FILE TREE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-label">Repository</div>
+    <h2>Project Structure</h2>
+    <div class="file-tree">
+      <div class="tree-root">📁 hospital-analytics-lakehouse/</div>
+      <div class="tree-indent">
+        <div><span class="tree-dir">📁 01_raw_data/</span></div>
+        <div class="tree-indent2"><span class="tree-file py">generate_data.py</span> <span class="tree-comment">← 2K patients · 5K admissions · 5K billing · 10K occupancy</span></div>
+        <div class="tree-indent2"><span class="tree-file csv">patients_raw.csv · admissions_raw.csv · billing_raw.csv · bed_occupancy_raw.csv</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 02_bronze/</span></div>
+        <div class="tree-indent2"><span class="tree-file py">bronze_ingestion.py</span> <span class="tree-comment">← metadata + schema validation + ingestion log</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 03_silver/</span></div>
+        <div class="tree-indent2"><span class="tree-file py">silver_transformation.py</span> <span class="tree-comment">← cleaning · business rules · quarantine · derived cols</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 04_gold/</span></div>
+        <div class="tree-indent2"><span class="tree-file py">gold_star_schema.py</span> <span class="tree-comment">← dims + facts + aggregates</span></div>
+        <div class="tree-indent2"><span class="tree-file csv">dim_date · dim_patient · dim_department · dim_doctor</span></div>
+        <div class="tree-indent2"><span class="tree-file csv">fact_admissions · fact_billing · fact_bed_occupancy</span></div>
+        <div class="tree-indent2"><span class="tree-file csv">agg_monthly_admissions · agg_dept_kpis · agg_revenue_summary</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 05_powerbi_dax/</span></div>
+        <div class="tree-indent2"><span class="tree-file dax">dax_measures.dax</span> <span class="tree-comment">← 30+ measures: KPIs · time intelligence · RLS · dynamic colors</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 07_pipeline/</span></div>
+        <div class="tree-indent2"><span class="tree-file json">fabric_pipeline_definition.json</span> <span class="tree-comment">← ForEach · parallel bronze · sequential silver · PBI refresh · alerts</span></div>
+
+        <div style="margin-top:8px"><span class="tree-dir">📁 06_docs/</span></div>
+        <div class="tree-indent2"><span class="tree-file">project_documentation.docx</span> <span class="tree-comment">← full architecture · deployment guide · data dictionary</span></div>
+
+        <div style="margin-top:8px"><span class="tree-file md">README.md · project_summary.html</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ FOOTER -->
+<footer>
+  <div class="wrap">
+    <p style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; color:var(--text); margin-bottom:12px;">Trinkesh Nimsarkar</p>
+    <p>Senior BI Developer · Microsoft Fabric Data Engineer · Healthcare Analytics</p>
+    <p style="margin-top:12px;">
+      <a href="mailto:trinkeshn@gmail.com">trinkeshn@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://linkedin.com/in/trinkesh-nimsarkar">LinkedIn</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/Trinkesh">github.com/Trinkesh</a>
+    </p>
+    <p style="margin-top:16px; font-size:11px; color:#1a3050;">PL-300 · DP-600 · DP-700</p>
+  </div>
+</footer>
+
+</body>
+</html>
